@@ -46,7 +46,7 @@ import sys
 from typing import TYPE_CHECKING
 
 
-__version__ = "0.30.0.dev0"
+__version__ = "0.35.0.dev0"
 
 # Alphabetical order of definitions is ensured in tests
 # WARNING: any comment added in this dictionary definition will be lost when
@@ -62,6 +62,12 @@ _SUBMOD_ATTRS = {
         "InferenceEndpointTimeoutError",
         "InferenceEndpointType",
     ],
+    "_jobs_api": [
+        "JobInfo",
+        "JobOwner",
+        "JobStage",
+        "JobStatus",
+    ],
     "_login": [
         "auth_list",
         "auth_switch",
@@ -69,6 +75,13 @@ _SUBMOD_ATTRS = {
         "login",
         "logout",
         "notebook_login",
+    ],
+    "_oauth": [
+        "OAuthInfo",
+        "OAuthOrgInfo",
+        "OAuthUserInfo",
+        "attach_huggingface_oauth",
+        "parse_huggingface_oauth",
     ],
     "_snapshot_download": [
         "snapshot_download",
@@ -158,6 +171,7 @@ _SUBMOD_ATTRS = {
         "add_space_variable",
         "auth_check",
         "cancel_access_request",
+        "cancel_job",
         "change_discussion_status",
         "comment_discussion",
         "create_branch",
@@ -187,6 +201,7 @@ _SUBMOD_ATTRS = {
         "duplicate_space",
         "edit_discussion_comment",
         "enable_webhook",
+        "fetch_job_logs",
         "file_exists",
         "get_collection",
         "get_dataset_tags",
@@ -203,11 +218,14 @@ _SUBMOD_ATTRS = {
         "get_user_overview",
         "get_webhook",
         "grant_access",
+        "inspect_job",
         "list_accepted_access_requests",
         "list_collections",
         "list_datasets",
         "list_inference_catalog",
         "list_inference_endpoints",
+        "list_jobs",
+        "list_lfs_files",
         "list_liked_repos",
         "list_models",
         "list_organization_members",
@@ -230,6 +248,7 @@ _SUBMOD_ATTRS = {
         "parse_safetensors_file_metadata",
         "pause_inference_endpoint",
         "pause_space",
+        "permanently_delete_lfs_files",
         "preupload_lfs_files",
         "reject_access_request",
         "rename_discussion",
@@ -242,6 +261,8 @@ _SUBMOD_ATTRS = {
         "resume_inference_endpoint",
         "revision_exists",
         "run_as_future",
+        "run_job",
+        "run_uv_job",
         "scale_to_zero_inference_endpoint",
         "set_space_sleep_time",
         "space_info",
@@ -292,10 +313,13 @@ _SUBMOD_ATTRS = {
         "ChatCompletionInputFunctionDefinition",
         "ChatCompletionInputFunctionName",
         "ChatCompletionInputGrammarType",
-        "ChatCompletionInputGrammarTypeType",
+        "ChatCompletionInputJSONSchema",
         "ChatCompletionInputMessage",
         "ChatCompletionInputMessageChunk",
         "ChatCompletionInputMessageChunkType",
+        "ChatCompletionInputResponseFormatJSONObject",
+        "ChatCompletionInputResponseFormatJSONSchema",
+        "ChatCompletionInputResponseFormatText",
         "ChatCompletionInputStreamOptions",
         "ChatCompletionInputTool",
         "ChatCompletionInputToolCall",
@@ -348,6 +372,10 @@ _SUBMOD_ATTRS = {
         "ImageToTextInput",
         "ImageToTextOutput",
         "ImageToTextParameters",
+        "ImageToVideoInput",
+        "ImageToVideoOutput",
+        "ImageToVideoParameters",
+        "ImageToVideoTargetSize",
         "ObjectDetectionBoundingBox",
         "ObjectDetectionInput",
         "ObjectDetectionOutputElement",
@@ -431,6 +459,12 @@ _SUBMOD_ATTRS = {
         "ZeroShotObjectDetectionOutputElement",
         "ZeroShotObjectDetectionParameters",
     ],
+    "inference._mcp.agent": [
+        "Agent",
+    ],
+    "inference._mcp.mcp_client": [
+        "MCPClient",
+    ],
     "inference_api": [
         "InferenceApi",
     ],
@@ -510,6 +544,7 @@ _SUBMOD_ATTRS = {
 # ```
 
 __all__ = [
+    "Agent",
     "AsyncInferenceClient",
     "AudioClassificationInput",
     "AudioClassificationOutputElement",
@@ -533,10 +568,13 @@ __all__ = [
     "ChatCompletionInputFunctionDefinition",
     "ChatCompletionInputFunctionName",
     "ChatCompletionInputGrammarType",
-    "ChatCompletionInputGrammarTypeType",
+    "ChatCompletionInputJSONSchema",
     "ChatCompletionInputMessage",
     "ChatCompletionInputMessageChunk",
     "ChatCompletionInputMessageChunkType",
+    "ChatCompletionInputResponseFormatJSONObject",
+    "ChatCompletionInputResponseFormatJSONSchema",
+    "ChatCompletionInputResponseFormatText",
     "ChatCompletionInputStreamOptions",
     "ChatCompletionInputTool",
     "ChatCompletionInputToolCall",
@@ -626,6 +664,10 @@ __all__ = [
     "ImageToTextInput",
     "ImageToTextOutput",
     "ImageToTextParameters",
+    "ImageToVideoInput",
+    "ImageToVideoOutput",
+    "ImageToVideoParameters",
+    "ImageToVideoTargetSize",
     "InferenceApi",
     "InferenceClient",
     "InferenceEndpoint",
@@ -634,11 +676,19 @@ __all__ = [
     "InferenceEndpointTimeoutError",
     "InferenceEndpointType",
     "InferenceTimeoutError",
+    "JobInfo",
+    "JobOwner",
+    "JobStage",
+    "JobStatus",
     "KerasModelHubMixin",
+    "MCPClient",
     "ModelCard",
     "ModelCardData",
     "ModelHubMixin",
     "ModelInfo",
+    "OAuthInfo",
+    "OAuthOrgInfo",
+    "OAuthUserInfo",
     "ObjectDetectionBoundingBox",
     "ObjectDetectionInput",
     "ObjectDetectionOutputElement",
@@ -760,11 +810,13 @@ __all__ = [
     "add_collection_item",
     "add_space_secret",
     "add_space_variable",
+    "attach_huggingface_oauth",
     "auth_check",
     "auth_list",
     "auth_switch",
     "cached_assets_path",
     "cancel_access_request",
+    "cancel_job",
     "change_discussion_status",
     "comment_discussion",
     "configure_http_backend",
@@ -798,6 +850,7 @@ __all__ = [
     "enable_webhook",
     "export_entries_as_dduf",
     "export_folder_as_dduf",
+    "fetch_job_logs",
     "file_exists",
     "from_pretrained_fastai",
     "from_pretrained_keras",
@@ -824,12 +877,15 @@ __all__ = [
     "grant_access",
     "hf_hub_download",
     "hf_hub_url",
+    "inspect_job",
     "interpreter_login",
     "list_accepted_access_requests",
     "list_collections",
     "list_datasets",
     "list_inference_catalog",
     "list_inference_endpoints",
+    "list_jobs",
+    "list_lfs_files",
     "list_liked_repos",
     "list_models",
     "list_organization_members",
@@ -859,9 +915,11 @@ __all__ = [
     "move_repo",
     "notebook_login",
     "paper_info",
+    "parse_huggingface_oauth",
     "parse_safetensors_file_metadata",
     "pause_inference_endpoint",
     "pause_space",
+    "permanently_delete_lfs_files",
     "preupload_lfs_files",
     "push_to_hub_fastai",
     "push_to_hub_keras",
@@ -877,6 +935,8 @@ __all__ = [
     "resume_inference_endpoint",
     "revision_exists",
     "run_as_future",
+    "run_job",
+    "run_uv_job",
     "save_pretrained_keras",
     "save_torch_model",
     "save_torch_state_dict",
@@ -1014,6 +1074,12 @@ if TYPE_CHECKING:  # pragma: no cover
         InferenceEndpointTimeoutError,  # noqa: F401
         InferenceEndpointType,  # noqa: F401
     )
+    from ._jobs_api import (
+        JobInfo,  # noqa: F401
+        JobOwner,  # noqa: F401
+        JobStage,  # noqa: F401
+        JobStatus,  # noqa: F401
+    )
     from ._login import (
         auth_list,  # noqa: F401
         auth_switch,  # noqa: F401
@@ -1021,6 +1087,13 @@ if TYPE_CHECKING:  # pragma: no cover
         login,  # noqa: F401
         logout,  # noqa: F401
         notebook_login,  # noqa: F401
+    )
+    from ._oauth import (
+        OAuthInfo,  # noqa: F401
+        OAuthOrgInfo,  # noqa: F401
+        OAuthUserInfo,  # noqa: F401
+        attach_huggingface_oauth,  # noqa: F401
+        parse_huggingface_oauth,  # noqa: F401
     )
     from ._snapshot_download import snapshot_download  # noqa: F401
     from ._space_api import (
@@ -1106,6 +1179,7 @@ if TYPE_CHECKING:  # pragma: no cover
         add_space_variable,  # noqa: F401
         auth_check,  # noqa: F401
         cancel_access_request,  # noqa: F401
+        cancel_job,  # noqa: F401
         change_discussion_status,  # noqa: F401
         comment_discussion,  # noqa: F401
         create_branch,  # noqa: F401
@@ -1135,6 +1209,7 @@ if TYPE_CHECKING:  # pragma: no cover
         duplicate_space,  # noqa: F401
         edit_discussion_comment,  # noqa: F401
         enable_webhook,  # noqa: F401
+        fetch_job_logs,  # noqa: F401
         file_exists,  # noqa: F401
         get_collection,  # noqa: F401
         get_dataset_tags,  # noqa: F401
@@ -1151,11 +1226,14 @@ if TYPE_CHECKING:  # pragma: no cover
         get_user_overview,  # noqa: F401
         get_webhook,  # noqa: F401
         grant_access,  # noqa: F401
+        inspect_job,  # noqa: F401
         list_accepted_access_requests,  # noqa: F401
         list_collections,  # noqa: F401
         list_datasets,  # noqa: F401
         list_inference_catalog,  # noqa: F401
         list_inference_endpoints,  # noqa: F401
+        list_jobs,  # noqa: F401
+        list_lfs_files,  # noqa: F401
         list_liked_repos,  # noqa: F401
         list_models,  # noqa: F401
         list_organization_members,  # noqa: F401
@@ -1178,6 +1256,7 @@ if TYPE_CHECKING:  # pragma: no cover
         parse_safetensors_file_metadata,  # noqa: F401
         pause_inference_endpoint,  # noqa: F401
         pause_space,  # noqa: F401
+        permanently_delete_lfs_files,  # noqa: F401
         preupload_lfs_files,  # noqa: F401
         reject_access_request,  # noqa: F401
         rename_discussion,  # noqa: F401
@@ -1190,6 +1269,8 @@ if TYPE_CHECKING:  # pragma: no cover
         resume_inference_endpoint,  # noqa: F401
         revision_exists,  # noqa: F401
         run_as_future,  # noqa: F401
+        run_job,  # noqa: F401
+        run_uv_job,  # noqa: F401
         scale_to_zero_inference_endpoint,  # noqa: F401
         set_space_sleep_time,  # noqa: F401
         space_info,  # noqa: F401
@@ -1238,10 +1319,13 @@ if TYPE_CHECKING:  # pragma: no cover
         ChatCompletionInputFunctionDefinition,  # noqa: F401
         ChatCompletionInputFunctionName,  # noqa: F401
         ChatCompletionInputGrammarType,  # noqa: F401
-        ChatCompletionInputGrammarTypeType,  # noqa: F401
+        ChatCompletionInputJSONSchema,  # noqa: F401
         ChatCompletionInputMessage,  # noqa: F401
         ChatCompletionInputMessageChunk,  # noqa: F401
         ChatCompletionInputMessageChunkType,  # noqa: F401
+        ChatCompletionInputResponseFormatJSONObject,  # noqa: F401
+        ChatCompletionInputResponseFormatJSONSchema,  # noqa: F401
+        ChatCompletionInputResponseFormatText,  # noqa: F401
         ChatCompletionInputStreamOptions,  # noqa: F401
         ChatCompletionInputTool,  # noqa: F401
         ChatCompletionInputToolCall,  # noqa: F401
@@ -1294,6 +1378,10 @@ if TYPE_CHECKING:  # pragma: no cover
         ImageToTextInput,  # noqa: F401
         ImageToTextOutput,  # noqa: F401
         ImageToTextParameters,  # noqa: F401
+        ImageToVideoInput,  # noqa: F401
+        ImageToVideoOutput,  # noqa: F401
+        ImageToVideoParameters,  # noqa: F401
+        ImageToVideoTargetSize,  # noqa: F401
         ObjectDetectionBoundingBox,  # noqa: F401
         ObjectDetectionInput,  # noqa: F401
         ObjectDetectionOutputElement,  # noqa: F401
@@ -1377,6 +1465,8 @@ if TYPE_CHECKING:  # pragma: no cover
         ZeroShotObjectDetectionOutputElement,  # noqa: F401
         ZeroShotObjectDetectionParameters,  # noqa: F401
     )
+    from .inference._mcp.agent import Agent  # noqa: F401
+    from .inference._mcp.mcp_client import MCPClient  # noqa: F401
     from .inference_api import InferenceApi  # noqa: F401
     from .keras_mixin import (
         KerasModelHubMixin,  # noqa: F401

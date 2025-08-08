@@ -36,6 +36,7 @@ DEFAULT_DOWNLOAD_TIMEOUT = 10
 DEFAULT_REQUEST_TIMEOUT = 10
 DOWNLOAD_CHUNK_SIZE = 10 * 1024 * 1024
 HF_TRANSFER_CONCURRENCY = 100
+MAX_HTTP_DOWNLOAD_SIZE = 50 * 1000 * 1000 * 1000  # 50 GB
 
 # Constants for serialization
 
@@ -73,12 +74,24 @@ if _staging_mode:
 HUGGINGFACE_HEADER_X_REPO_COMMIT = "X-Repo-Commit"
 HUGGINGFACE_HEADER_X_LINKED_ETAG = "X-Linked-Etag"
 HUGGINGFACE_HEADER_X_LINKED_SIZE = "X-Linked-Size"
+HUGGINGFACE_HEADER_X_BILL_TO = "X-HF-Bill-To"
 
 INFERENCE_ENDPOINT = os.environ.get("HF_INFERENCE_ENDPOINT", "https://api-inference.huggingface.co")
 
 # See https://huggingface.co/docs/inference-endpoints/index
 INFERENCE_ENDPOINTS_ENDPOINT = "https://api.endpoints.huggingface.cloud/v2"
 INFERENCE_CATALOG_ENDPOINT = "https://endpoints.huggingface.co/api/catalog"
+
+# See https://api.endpoints.huggingface.cloud/#post-/v2/endpoint/-namespace-
+INFERENCE_ENDPOINT_IMAGE_KEYS = [
+    "custom",
+    "huggingface",
+    "huggingfaceNeuron",
+    "llamacpp",
+    "tei",
+    "tgi",
+    "tgiNeuron",
+]
 
 # Proxy for third-party providers
 INFERENCE_PROXY_TEMPLATE = "https://router.huggingface.co/{provider}"
@@ -271,3 +284,25 @@ ALL_INFERENCE_API_FRAMEWORKS = MAIN_INFERENCE_API_FRAMEWORKS + [
     "stanza",
     "timm",
 ]
+
+# If OAuth didn't work after 2 redirects, there's likely a third-party cookie issue in the Space iframe view.
+# In this case, we redirect the user to the non-iframe view.
+OAUTH_MAX_REDIRECTS = 2
+
+# OAuth-related environment variables injected by the Space
+OAUTH_CLIENT_ID = os.environ.get("OAUTH_CLIENT_ID")
+OAUTH_CLIENT_SECRET = os.environ.get("OAUTH_CLIENT_SECRET")
+OAUTH_SCOPES = os.environ.get("OAUTH_SCOPES")
+OPENID_PROVIDER_URL = os.environ.get("OPENID_PROVIDER_URL")
+
+# Xet constants
+HUGGINGFACE_HEADER_X_XET_ENDPOINT = "X-Xet-Cas-Url"
+HUGGINGFACE_HEADER_X_XET_ACCESS_TOKEN = "X-Xet-Access-Token"
+HUGGINGFACE_HEADER_X_XET_EXPIRATION = "X-Xet-Token-Expiration"
+HUGGINGFACE_HEADER_X_XET_HASH = "X-Xet-Hash"
+HUGGINGFACE_HEADER_X_XET_REFRESH_ROUTE = "X-Xet-Refresh-Route"
+HUGGINGFACE_HEADER_LINK_XET_AUTH_KEY = "xet-auth"
+
+default_xet_cache_path = os.path.join(HF_HOME, "xet")
+HF_XET_CACHE = os.getenv("HF_XET_CACHE", default_xet_cache_path)
+HF_HUB_DISABLE_XET: bool = _is_true(os.environ.get("HF_HUB_DISABLE_XET"))

@@ -83,16 +83,16 @@ but before that, all previous logs on the repo on deleted. All of this in a sing
 
 ## Upload from the CLI
 
-You can use the `huggingface-cli upload` command from the terminal to directly upload files to the Hub. Internally it uses the same [`upload_file`] and [`upload_folder`] helpers described above.
+You can use the `hf upload` command from the terminal to directly upload files to the Hub. Internally it uses the same [`upload_file`] and [`upload_folder`] helpers described above.
 
 You can either upload a single file or an entire folder:
 
 ```bash
-# Usage:  huggingface-cli upload [repo_id] [local_path] [path_in_repo]
->>> huggingface-cli upload Wauplin/my-cool-model ./models/model.safetensors model.safetensors
+# Usage:  hf upload [repo_id] [local_path] [path_in_repo]
+>>> hf upload Wauplin/my-cool-model ./models/model.safetensors model.safetensors
 https://huggingface.co/Wauplin/my-cool-model/blob/main/model.safetensors
 
->>> huggingface-cli upload Wauplin/my-cool-model ./models .
+>>> hf upload Wauplin/my-cool-model ./models .
 https://huggingface.co/Wauplin/my-cool-model/tree/main
 ```
 
@@ -101,11 +101,11 @@ check if a local folder or file has the same name as the `repo_id`. If that's th
 Otherwise, an exception is raised asking the user to explicitly set `local_path`. In any case, if `path_in_repo` is not
 set, files are uploaded at the root of the repo.
 
-For more details about the CLI upload command, please refer to the [CLI guide](./cli#huggingface-cli-upload).
+For more details about the CLI upload command, please refer to the [CLI guide](./cli#hf-upload).
 
 ## Upload a large folder
 
-In most cases, the [`upload_folder`] method and `huggingface-cli upload` command should be the go-to solutions to upload files to the Hub. They ensure a single commit will be made, handle a lot of use cases, and fail explicitly when something wrong happens. However, when dealing with a large amount of data, you will usually prefer a resilient process even if it leads to more commits or requires more CPU usage. The [`upload_large_folder`] method has been implemented in that spirit:
+In most cases, the [`upload_folder`] method and `hf upload` command should be the go-to solutions to upload files to the Hub. They ensure a single commit will be made, handle a lot of use cases, and fail explicitly when something wrong happens. However, when dealing with a large amount of data, you will usually prefer a resilient process even if it leads to more commits or requires more CPU usage. The [`upload_large_folder`] method has been implemented in that spirit:
 - it is resumable: the upload process is split into many small tasks (hashing files, pre-uploading them, and committing them). Each time a task is completed, the result is cached locally in a `./cache/huggingface` folder inside the folder you are trying to upload. By doing so, restarting the process after an interruption will resume all completed tasks.
 - it is multi-threaded: hashing large files and pre-uploading them benefits a lot from multithreading if your machine allows it.
 - it is resilient to errors: a high-level retry-mechanism has been added to retry each independent task indefinitely until it passes (no matter if it's a OSError, ConnectionError, PermissionError, etc.). This mechanism is double-edged. If transient errors happen, the process will continue and retry. If permanent errors happen (e.g. permission denied), it will retry indefinitely without solving the root cause.
@@ -139,7 +139,7 @@ First, the repo is created if it didn't exist before. Then, the local folder is 
 A command line is also provided. You can define the number of workers and the level of verbosity in the terminal:
 
 ```sh
-huggingface-cli upload-large-folder HuggingFaceM4/Docmatix --repo-type=dataset /path/to/local/docmatix --num-workers=16
+hf upload-large-folder HuggingFaceM4/Docmatix --repo-type=dataset /path/to/local/docmatix --num-workers=16
 ```
 
 <Tip>
@@ -166,14 +166,17 @@ Check out our [Repository limitations and recommendations](https://huggingface.c
 
 - **Start small**: We recommend starting with a small amount of data to test your upload script. It's easier to iterate on a script when failing takes only a little time.
 - **Expect failures**: Streaming large amounts of data is challenging. You don't know what can happen, but it's always best to consider that something will fail at least once -no matter if it's due to your machine, your connection, or our servers. For example, if you plan to upload a large number of files, it's best to keep track locally of which files you already uploaded before uploading the next batch. You are ensured that an LFS file that is already committed will never be re-uploaded twice but checking it client-side can still save some time. This is what [`upload_large_folder`] does for you.
-- **Use `hf_transfer`**: this is a Rust-based [library](https://github.com/huggingface/hf_transfer) meant to speed up uploads on machines with very high bandwidth. To use `hf_transfer`:
+- **Use `hf_xet`**: this leverages the new storage backend for Hub, is written in Rust, and is being rolled out to users right now. In order to upload using `hf_xet` your repo must be enabled to use the Xet storage backend. It is being rolled out now, so join the [waitlist](https://huggingface.co/join/xet) to get onboarded soon!
+- **Use `hf_transfer`**: this is a Rust-based [library](https://github.com/huggingface/hf_transfer) meant to speed up uploads on machines with very high bandwidth (uploads LFS files). To use `hf_transfer`:
     1. Specify the `hf_transfer` extra when installing `huggingface_hub`
        (i.e., `pip install huggingface_hub[hf_transfer]`).
     2. Set `HF_HUB_ENABLE_HF_TRANSFER=1` as an environment variable.
 
 <Tip warning={true}>
 
-`hf_transfer` is a power user tool! It is tested and production-ready, but it lacks user-friendly features like advanced error handling or proxies. For more details, please take a look at this [section](https://huggingface.co/docs/huggingface_hub/hf_transfer).
+`hf_transfer` is a power user tool for uploading LFS files! It is tested and production-ready, but it is less future-proof and lacks user-friendly features like advanced error handling or proxies. For more details, please take a look at this [section](https://huggingface.co/docs/huggingface_hub/hf_transfer).
+
+Note that `hf_xet` and `hf_transfer` tools are mutually exclusive. The former is used to upload files to Xet-enabled repos while the later uploads LFS files to regular repos.
 
 </Tip>
 
@@ -182,6 +185,31 @@ Check out our [Repository limitations and recommendations](https://huggingface.c
 In most cases, you won't need more than [`upload_file`] and [`upload_folder`] to upload your files to the Hub.
 However, `huggingface_hub` has more advanced features to make things easier. Let's have a look at them!
 
+### Faster Uploads
+
+Take advantage of faster uploads through `hf_xet`, the Python binding to the [`xet-core`](https://github.com/huggingface/xet-core) library that enables chunk-based deduplication for faster uploads and downloads. `hf_xet` integrates seamlessly with `huggingface_hub`, but uses the Rust `xet-core` library and Xet storage instead of LFS. 
+
+<Tip warning={true}>
+
+As of May 23rd, 2025, Xet-enabled repositories [are the default for all new Hugging Face Hub users and organizations](https://huggingface.co/changelog/xet-default-for-new-users). If your user or organization was created before then, you may need Xet enabled on your repo for `hf_xet` to actually upload to the Xet backend. Join the [waitlist](https://huggingface.co/join/xet) to make Xet the default for all your repositories. Also, note that while `hf_xet` works with in-memory bytes or bytearray data, support for BinaryIO streams is still pending.
+
+</Tip>
+
+`hf_xet` uses the Xet storage system, which breaks files down into immutable chunks, storing collections of these chunks (called blocks or xorbs) remotely and retrieving them to reassemble the file when requested. When uploading, after confirming the user is authorized to write to this repo, `hf_xet` will scan the files, breaking them down into their chunks and collecting those chunks into xorbs (and deduplicating across known chunks), and then will be upload these xorbs to the Xet content-addressable service (CAS), which will verify the integrity of the xorbs, register the xorb metadata along with the LFS SHA256 hash (to support lookup/download), and write the xorbs to remote storage.
+
+To enable it, simply install the latest version of `huggingface_hub`:
+
+```bash
+pip install -U "huggingface_hub"
+```
+
+As of `huggingface_hub` 0.32.0, this will also install `hf_xet`. 
+
+All other `huggingface_hub` APIs will continue to work without any modification. To learn more about the benefits of Xet storage and `hf_xet`, refer to this [section](https://huggingface.co/docs/hub/storage-backends).
+
+**Cluster / Distributed Filesystem Upload Considerations**
+
+When uploading from a cluster, the files being uploaded often reside on a distributed or networked filesystem (NFS, EBS, Lustre, Fsx, etc). Xet storage will chunk those files and write them into blocks (also called xorbs) locally, and once the block is completed will upload them. For better performance when uploading from a distributed filesystem, make sure to set [`HF_XET_CACHE`](../package_reference/environment_variables#hfxetcache) to a directory that is on a local disk (ex. a local NVMe or SSD disk). The default location for the Xet cache is under `HF_HOME` at (`~/.cache/huggingface/xet`) and this being in the user's home directory is often also located on the distributed filesystem.
 
 ### Non-blocking uploads
 
@@ -475,7 +503,7 @@ core differences between HTTP-based and Git-based approaches.
 Git LFS automatically handles files larger than 10MB. But for very large files (>5GB), you need to install a custom transfer agent for Git LFS:
 
 ```bash
-huggingface-cli lfs-enable-largefiles
+hf lfs-enable-largefiles
 ```
 
 You should install this for each repository that has a very large file. Once installed, you'll be able to push files larger than 5GB.

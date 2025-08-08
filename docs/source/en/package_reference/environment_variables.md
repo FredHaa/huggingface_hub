@@ -36,6 +36,12 @@ spaces).
 
 Defaults to `"$HF_HOME/hub"` (e.g. `"~/.cache/huggingface/hub"` by default).
 
+### HF_XET_CACHE
+
+To configure where Xet chunks (byte ranges from files managed by Xet backend) are cached locally.
+
+Defaults to `"$HF_HOME/xet"` (e.g. `"~/.cache/huggingface/xet"` by default).
+
 ### HF_ASSETS_CACHE
 
 To configure where [assets](../guides/manage-cache#caching-assets) created by downstream libraries
@@ -76,6 +82,32 @@ Integer value to define the number of seconds to wait for server response when f
 ### HF_HUB_DOWNLOAD_TIMEOUT
 
 Integer value to define the number of seconds to wait for server response when downloading a file. If the request times out, a TimeoutError is raised. Setting a higher value is beneficial on machine with a slow connection. A smaller value makes the process fail quicker in case of complete network outage. Default to 10s.
+
+## Xet 
+
+### Other Xet environment variables
+* [`HF_HUB_DISABLE_XET`](../package_reference/environment_variables#hfhubdisablexet)
+* [`HF_XET_CACHE`](../package_reference/environment_variables#hfxetcache)
+* [`HF_XET_HIGH_PERFORMANCE`](../package_reference/environment_variables#hfxethighperformance)
+* [`HF_XET_RECONSTRUCT_WRITE_SEQUENTIALLY`](../package_reference/environment_variables#hfxetreconstructwritesequentially)
+
+### HF_XET_CHUNK_CACHE_SIZE_BYTES
+
+To set the size of the Xet chunk cache locally. Increasing this will give more space for caching terms/chunks fetched from S3. A larger cache can better take advantage of deduplication across repos & files. If your network speed is much greater than your local disk speed (ex 10Gbps vs SSD or worse) then consider disabling the Xet cache for increased performance. To disable the Xet cache, set `HF_XET_CHUNK_CACHE_SIZE_BYTES=0`.
+
+Defaults to `10000000000` (10GB).
+
+### HF_XET_SHARD_CACHE_SIZE_LIMIT
+
+To set the size of the Xet shard cache locally. Increasing this will improve upload effeciency as chunks referenced in cached shard files are not re-uploaded. Note that the default soft limit is likely sufficient for most workloads. 
+
+Defaults to `4000000000` (4GB).
+
+### HF_XET_NUM_CONCURRENT_RANGE_GETS
+
+To set the number of concurrent terms (range of bytes from within a xorb, often called a chunk) downloaded from S3 per file. Increasing this will help with the speed of downloading a file if there is network bandwidth available. 
+
+Defaults to `16`.
 
 ## Boolean values
 
@@ -139,6 +171,10 @@ Each library defines its own policy (i.e. which usage to monitor) but the core i
 
 You can set `HF_HUB_DISABLE_TELEMETRY=1` as environment variable to globally disable telemetry.
 
+### HF_HUB_DISABLE_XET
+
+Set to disable using `hf-xet`, even if it is available in your Python environment. This is since `hf-xet` will be used automatically if it is found, this allows explicitly disabling its usage.
+
 ### HF_HUB_ENABLE_HF_TRANSFER
 
 Set to `True` for faster uploads and downloads from the Hub using `hf_transfer`.
@@ -157,6 +193,22 @@ To use `hf_transfer`:
 2. Set `HF_HUB_ENABLE_HF_TRANSFER=1` as an environment variable.
 
 Please note that using `hf_transfer` comes with certain limitations. Since it is not purely Python-based, debugging errors may be challenging. Additionally, `hf_transfer` lacks several user-friendly features such as resumable downloads and proxies. These omissions are intentional to maintain the simplicity and speed of the Rust logic. Consequently, `hf_transfer` is not enabled by default in `huggingface_hub`.
+
+<Tip>
+
+`hf_xet` is an alternative to `hf_transfer`. It provides efficient file transfers through a chunk-based deduplication strategy, custom Xet storage (replacing Git LFS), and a seamless integration with `huggingface_hub`. 
+
+[Read more about the package](https://huggingface.co/docs/hub/storage-backends) and enable with `pip install "huggingface_hub[hf_xet]"`.
+
+</Tip>
+
+### HF_XET_HIGH_PERFORMANCE
+
+Set `hf-xet` to operate with increased settings to maximize network and disk resources on the machine. Enabling high performance mode will try to saturate the network bandwidth of this machine and utilize all CPU cores for parallel upload/download activity. Consider this analogous to setting `HF_HUB_ENABLE_HF_TRANSFER=True` when uploading / downloading using `hf-xet` to the Xet storage backend.
+
+### HF_XET_RECONSTRUCT_WRITE_SEQUENTIALLY
+
+To have `hf-xet` write sequentially to local disk, instead of in parallel. `hf-xet` is designed for SSD/NVMe disks (using parallel writes with direct addressing). If you are using an HDD (spinning hard disk), setting this will change disk writes to be sequential instead of parallel. For slower hard disks, this can improve overall write performance, as the disk is not spinning to seek for parallel writes.
 
 ## Deprecated environment variables
 
@@ -180,7 +232,7 @@ Boolean value. Equivalent to `HF_HUB_DISABLE_TELEMETRY`. When set to true, telem
 
 ### NO_COLOR
 
-Boolean value. When set, `huggingface-cli` tool will not print any ANSI color.
+Boolean value. When set, `hf` CLI will not print any ANSI color.
 See [no-color.org](https://no-color.org/).
 
 ### XDG_CACHE_HOME

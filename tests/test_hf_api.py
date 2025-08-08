@@ -60,6 +60,7 @@ from huggingface_hub.hf_api import (
     ExpandModelProperty_T,
     ExpandSpaceProperty_T,
     InferenceEndpoint,
+    InferenceProviderMapping,
     ModelInfo,
     RepoSibling,
     RepoUrl,
@@ -180,7 +181,7 @@ class HfApiEndpointsTest(HfApiCommonTest):
 
     @patch("huggingface_hub.utils._headers.get_token", return_value=TOKEN)
     def test_whoami_with_implicit_token_from_login(self, mock_get_token: Mock) -> None:
-        """Test using `whoami` after a `huggingface-cli login`."""
+        """Test using `whoami` after a `hf auth login`."""
         with patch.object(self._api, "token", None):  # no default token
             info = self._api.whoami()
         self.assertEqual(info["name"], USER)
@@ -273,6 +274,13 @@ class HfApiEndpointsTest(HfApiCommonTest):
                 info = self._api.dataset_info(repo_id)
                 assert info.gated == gated_value
                 assert info.private == private_value
+
+    @use_tmp_repo(repo_type="model")
+    def test_update_repo_settings_xet_enabled(self, repo_url: RepoUrl):
+        repo_id = repo_url.repo_id
+        self._api.update_repo_settings(repo_id=repo_id, xet_enabled=True)
+        info = self._api.model_info(repo_id, expand="xetEnabled")
+        assert info.xet_enabled
 
     @expect_deprecation("get_token_permission")
     def test_get_token_permission_on_oauth_token(self):
@@ -1652,10 +1660,10 @@ class HfApiBranchEndpointTest(HfApiCommonTest):
         """Test `create_branch` on existing branch."""
         self._api.create_branch(repo_url.repo_id, branch="cool-branch")
 
-        with self.assertRaisesRegex(HfHubHTTPError, "Reference already exists"):
+        with self.assertRaisesRegex(HfHubHTTPError, r"Reference refs/heads/cool-branch already exists"):
             self._api.create_branch(repo_url.repo_id, branch="cool-branch")
 
-        with self.assertRaisesRegex(HfHubHTTPError, "Reference already exists"):
+        with self.assertRaisesRegex(HfHubHTTPError, r"Reference refs/heads/main already exists"):
             self._api.create_branch(repo_url.repo_id, branch="main")
 
         # exist_ok=True => doesn't fail
@@ -2504,6 +2512,38 @@ class HfApiPublicProductionTest(unittest.TestCase):
                 "HuggingFaceH4/zephyr-7b-beta", "pytorch_model-00001-of-00008.bin"
             )
 
+    def test_inference_provider_mapping_model_info(self):
+        model = self._api.model_info("deepseek-ai/DeepSeek-R1-0528", expand="inferenceProviderMapping")
+        mapping = model.inference_provider_mapping
+        assert isinstance(mapping, list)
+        assert len(mapping) > 0
+        for item in mapping:
+            assert isinstance(item, InferenceProviderMapping)
+            assert item.provider is not None
+            assert item.hf_model_id == "deepseek-ai/DeepSeek-R1-0528"
+            assert item.provider_id is not None
+
+    def test_inference_provider_mapping_list_models(self):
+        models = list(self._api.list_models(author="deepseek-ai", expand="inferenceProviderMapping", limit=1))
+        assert len(models) > 0
+        mapping = models[0].inference_provider_mapping
+        assert isinstance(mapping, list)
+        assert len(mapping) > 0
+        for item in mapping:
+            assert isinstance(item, InferenceProviderMapping)
+            assert item.provider is not None
+            assert item.hf_model_id is not None
+            assert item.provider_id is not None
+
+    def test_filter_models_by_inference_provider(self):
+        models = list(
+            self._api.list_models(inference_provider="hf-inference", expand=["inferenceProviderMapping"], limit=10)
+        )
+        assert len(models) > 0
+        for model in models:
+            assert model.inference_provider_mapping is not None
+            assert any(mapping.provider == "hf-inference" for mapping in model.inference_provider_mapping)
+
 
 class HfApiPrivateTest(HfApiCommonTest):
     def setUp(self) -> None:
@@ -2744,9 +2784,9 @@ class HfLargefilesTest(HfApiCommonTest):
             cwd=self.cache_dir,
         )
         self.assertEqual(failed_process.returncode, 1)
-        self.assertIn("cli lfs-enable-largefiles", failed_process.stderr.decode())
+        self.assertIn('Run "hf lfs-enable-largefiles ./path/to/your/repo"', failed_process.stderr.decode())
         # ^ Instructions on how to fix this are included in the error message.
-        subprocess.run(["huggingface-cli", "lfs-enable-largefiles", self.cache_dir], check=True)
+        subprocess.run(["hf", "lfs-enable-largefiles", self.cache_dir], check=True)
 
         start_time = time.time()
         subprocess.run(["git", "push"], check=True, cwd=self.cache_dir)
@@ -2783,7 +2823,7 @@ class HfLargefilesTest(HfApiCommonTest):
         )
         subprocess.run(["git", "add", "*"], check=True, cwd=self.cache_dir)
         subprocess.run(["git", "commit", "-m", "both files in same commit"], check=True, cwd=self.cache_dir)
-        subprocess.run(["huggingface-cli", "lfs-enable-largefiles", self.cache_dir], check=True)
+        subprocess.run(["hf", "lfs-enable-largefiles", self.cache_dir], check=True)
 
         start_time = time.time()
         subprocess.run(["git", "push"], check=True, cwd=self.cache_dir)
@@ -3103,6 +3143,69 @@ class TestSquashHistory(HfApiCommonTest):
         assert len(squashed_branch_commits) == 1
 
 
+class TestListAndPermanentlyDeleteLFSFiles(HfApiCommonTest):
+    @use_tmp_repo()
+    def test_list_and_delete_lfs_files(self, repo_url: RepoUrl) -> None:
+        repo_id = repo_url.repo_id
+
+        # Main files
+        self._api.upload_file(path_or_fileobj=b"LFS content", path_in_repo="lfs_file.bin", repo_id=repo_id)
+        self._api.upload_file(path_or_fileobj=b"TXT content", path_in_repo="txt_file.txt", repo_id=repo_id)
+        self._api.upload_file(path_or_fileobj=b"LFS content 2", path_in_repo="lfs_file_2.bin", repo_id=repo_id)
+        self._api.upload_file(path_or_fileobj=b"TXT content 2", path_in_repo="txt_file_2.txt", repo_id=repo_id)
+
+        # Branch files
+        self._api.create_branch(repo_id=repo_id, branch="my-branch")
+        self._api.upload_file(
+            path_or_fileobj=b"LFS content branch",
+            path_in_repo="lfs_file_branch.bin",
+            repo_id=repo_id,
+            revision="my-branch",
+        )
+        self._api.upload_file(
+            path_or_fileobj=b"TXT content branch",
+            path_in_repo="txt_file_branch.txt",
+            repo_id=repo_id,
+            revision="my-branch",
+        )
+
+        # PR files
+        self._api.upload_file(
+            path_or_fileobj=b"LFS content PR", path_in_repo="lfs_file_PR.bin", repo_id=repo_id, create_pr=True
+        )
+        self._api.upload_file(
+            path_or_fileobj=b"TXT content PR", path_in_repo="txt_file_PR.txt", repo_id=repo_id, create_pr=True
+        )
+
+        # List LFS files
+        lfs_files = [file for file in self._api.list_lfs_files(repo_id=repo_id)]
+        assert len(lfs_files) == 4
+        assert {file.filename for file in lfs_files} == {
+            "lfs_file.bin",
+            "lfs_file_2.bin",
+            "lfs_file_branch.bin",
+            "lfs_file_PR.bin",
+        }
+
+        # Select LFS files that are on main
+        lfs_files_on_main = [file for file in lfs_files if file.ref == "main"]
+        assert len(lfs_files_on_main) == 2
+
+        # Permanently delete LFS files
+        self._api.permanently_delete_lfs_files(repo_id=repo_id, lfs_files=lfs_files_on_main)
+
+        # LFS files from branch and PR remain
+        lfs_files = [file for file in self._api.list_lfs_files(repo_id=repo_id)]
+        assert len(lfs_files) == 2
+        assert {file.filename for file in lfs_files} == {"lfs_file_branch.bin", "lfs_file_PR.bin"}
+
+        # Downloading "lfs_file.bin" fails with EntryNotFoundError
+        files = self._api.list_repo_files(repo_id=repo_id)
+        assert set(files) == {".gitattributes", "txt_file.txt", "txt_file_2.txt"}
+        with pytest.raises(EntryNotFoundError):
+            self._api.hf_hub_download(repo_id=repo_id, filename="lfs_file.bin")
+
+
 @pytest.mark.vcr
 class TestSpaceAPIProduction(unittest.TestCase):
     """
@@ -3132,7 +3235,7 @@ iface.launch()
         self.api = HfApi(token="hf_fake_token", endpoint=ENDPOINT_PRODUCTION)
 
         # Create a Space
-        self.api.create_repo(repo_id=self.repo_id, repo_type="space", space_sdk="gradio", private=True)
+        self.api.create_repo(repo_id=self.repo_id, repo_type="space", space_sdk="gradio", private=True, exist_ok=True)
         self.api.upload_file(
             path_or_fileobj=self._BASIC_APP_PY_TEMPLATE,
             repo_id=self.repo_id,
@@ -4060,6 +4163,13 @@ class CollectionAPITest(HfApiCommonTest):
         self._api.delete_repo(dataset_id, repo_type="dataset")
         self._api.delete_collection(collection.slug)
 
+    @with_production_testing
+    def test_collection_items_with_collections(self) -> None:
+        collection = HfApi().get_collection("celinah/inference-providers-function-calling-6826023e8ae9b24b3039ee5f")
+        assert len(collection.items) > 1
+        assert collection.items[0].item_type == "collection"
+        assert collection.items[0].item_id.startswith("celinah/")
+
 
 class AccessRequestAPITest(HfApiCommonTest):
     def setUp(self) -> None:
@@ -4411,6 +4521,7 @@ class HfApiInferenceCatalogTest(HfApiCommonTest):
                 },
                 "name": "llama-3-2-3b-instruct-eey",
                 "provider": {"region": "us-east-1", "vendor": "aws"},
+                "healthRoute": "/health",
                 "status": {
                     "createdAt": "2025-03-07T15:30:13.949Z",
                     "createdBy": {"id": "6273f303f6d63a28483fde12", "name": "Wauplin"},
@@ -4431,3 +4542,139 @@ class HfApiInferenceCatalogTest(HfApiCommonTest):
         )
         assert isinstance(endpoint, InferenceEndpoint)
         assert endpoint.name == "llama-3-2-3b-instruct-eey"
+
+
+@pytest.mark.parametrize(
+    "custom_image, expected_image_payload",
+    [
+        # Case 1: No custom_image provided
+        (
+            None,
+            {
+                "huggingface": {},
+            },
+        ),
+        # Case 2: Flat dictionary custom_image provided
+        (
+            {
+                "url": "my.registry/my-image:latest",
+                "port": 8080,
+            },
+            {
+                "custom": {
+                    "url": "my.registry/my-image:latest",
+                    "port": 8080,
+                }
+            },
+        ),
+        # Case 3: Explicitly keyed ('tgi') custom_image provided
+        (
+            {
+                "tgi": {
+                    "url": "ghcr.io/huggingface/text-generation-inference:latest",
+                }
+            },
+            {
+                "tgi": {
+                    "url": "ghcr.io/huggingface/text-generation-inference:latest",
+                }
+            },
+        ),
+        # Case 4: Explicitly keyed ('custom') custom_image provided
+        (
+            {
+                "custom": {
+                    "url": "another.registry/custom:v2",
+                }
+            },
+            {
+                "custom": {
+                    "url": "another.registry/custom:v2",
+                }
+            },
+        ),
+    ],
+    ids=["no_custom_image", "flat_dict_custom_image", "keyed_tgi_custom_image", "keyed_custom_custom_image"],
+)
+@patch("huggingface_hub.hf_api.get_session")
+def test_create_inference_endpoint_custom_image_payload(
+    mock_post: Mock,
+    custom_image: Optional[dict],
+    expected_image_payload: dict,
+):
+    common_args = {
+        "name": "test-endpoint-custom-img",
+        "repository": "meta-llama/Llama-2-7b-chat-hf",
+        "framework": "pytorch",
+        "accelerator": "gpu",
+        "instance_size": "medium",
+        "instance_type": "nvidia-a10g",
+        "region": "us-east-1",
+        "vendor": "aws",
+        "type": "protected",
+        "task": "text-generation",
+        "namespace": "Wauplin",
+    }
+    mock_session = mock_post.return_value
+    mock_post_method = mock_session.post
+    mock_response = Mock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {
+        "compute": {
+            "accelerator": "gpu",
+            "id": "aws-us-east-1-nvidia-l4-x1",
+            "instanceSize": "x1",
+            "instanceType": "nvidia-l4",
+            "scaling": {
+                "maxReplica": 1,
+                "measure": {"hardwareUsage": None},
+                "metric": "hardwareUsage",
+                "minReplica": 0,
+                "scaleToZeroTimeout": 15,
+            },
+        },
+        "model": {
+            "env": {},
+            "framework": "pytorch",
+            "image": {
+                "tgi": {
+                    "disableCustomKernels": False,
+                    "healthRoute": "/health",
+                    "port": 80,
+                    "url": "ghcr.io/huggingface/text-generation-inference:3.1.1",
+                }
+            },
+            "repository": "meta-llama/Llama-3.2-3B-Instruct",
+            "revision": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+            "secrets": {},
+            "task": "text-generation",
+        },
+        "name": "llama-3-2-3b-instruct-eey",
+        "provider": {"region": "us-east-1", "vendor": "aws"},
+        "healthRoute": "/health",
+        "status": {
+            "createdAt": "2025-03-07T15:30:13.949Z",
+            "createdBy": {"id": "6273f303f6d63a28483fde12", "name": "Wauplin"},
+            "message": "Endpoint waiting to be scheduled",
+            "readyReplica": 0,
+            "state": "pending",
+            "targetReplica": 1,
+            "updatedAt": "2025-03-07T15:30:13.949Z",
+            "updatedBy": {"id": "6273f303f6d63a28483fde12", "name": "Wauplin"},
+        },
+        "type": "protected",
+    }
+    mock_post_method.return_value = mock_response
+
+    api = HfApi(endpoint=ENDPOINT_STAGING, token=TOKEN)
+    if custom_image is not None:
+        api.create_inference_endpoint(custom_image=custom_image, **common_args)
+    else:
+        api.create_inference_endpoint(**common_args)
+
+    mock_post_method.assert_called_once()
+    _, call_kwargs = mock_post_method.call_args
+    payload = call_kwargs.get("json", {})
+
+    assert "model" in payload and "image" in payload["model"]
+    assert payload["model"]["image"] == expected_image_payload
